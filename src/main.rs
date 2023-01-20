@@ -1,5 +1,7 @@
 use console::Term;
+
 mod cli;
+
 fn main() {
     let term = Term::stdout();
 

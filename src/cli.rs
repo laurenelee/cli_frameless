@@ -1,7 +1,8 @@
-use console::Term;
-use console::Style;
 use std::io;
 use std::io::stdin;
+use console::{ Term, Style };
+
+
 
 pub fn run(term: &Term) -> io::Result<()> {
     let cyan = Style::new().cyan();
