@@ -1,6 +1,6 @@
 use std::io;
 use std::io::stdin;
-use console::{ Term, Style };
+use console::{ Term, Style, style };
 use reqwest;
 use serde_json;
 use serde::Deserialize;
@@ -8,13 +8,12 @@ use std::thread;
 use std::time::Duration;
 use parity_scale_codec::{Decode, Encode};
 use sp_core::{hexdisplay::HexDisplay};
-
+use hex;
+use spinners::{Spinner, Spinners};
 
 #[derive(Deserialize)]
 pub struct RPCResponses {
-    // jsonrpc: String,
     result: String,
-    // id: u8,
 }
 #[derive(Encode, Decode, Debug, PartialEq, Eq, Clone)]
 pub enum Call {
@@ -43,10 +42,10 @@ impl sp_runtime::traits::Extrinsic for BasicExtrinsic {
 }
 
 fn get_u32_input(message: &str, term: &Term) -> u32 {
-    term.write_line(&message);
+    term.write_line(&message).unwrap();
 
     let mut input: String = String::new();
-    stdin().read_line(&mut input);
+    stdin().read_line(&mut input).unwrap();
     input.trim().parse().unwrap()
 }
 
@@ -54,44 +53,69 @@ fn get_string(message: &str, term: &Term) -> String {
     term.write_line(&message).unwrap();
 
     let mut input: String = String::new();
-    stdin().read_line(&mut input);
+    stdin().read_line(&mut input).unwrap();
     input.trim().parse().unwrap()
 }
 
-fn create_account(client: &reqwest::blocking::Client, term: &Term, user_number: u8) -> io::Result<()> {
+fn create_account(client: &reqwest::blocking::Client, _term: &Term, user_number: u8) -> io::Result<()> {
     let new_account = BasicExtrinsic::new_unsigned(Call::NewAccount([user_number; 32]));
 
-    let new_account_res = client.post("http:/localhost:9933/")
+    client.post("http:/localhost:9933/")
         .json(&serde_json::json!({
             "jsonrpc": "2.0",
             "id": 1,
             "method": "author_submitExtrinsic",
             "params": [HexDisplay::from(&new_account.encode()).to_string()]
         }))
-        .send();
-    let new_account_response_body: RPCResponses = new_account_res.unwrap().json().unwrap();
-
-    println!("new account response {:?}", new_account_response_body.result);
-
+        .send()
+        .expect("Failed to create account");
     Ok(())
 }
 
 fn mint_loot(client: &reqwest::blocking::Client, term: &Term, user_number: u8) -> io::Result<()> {
     let mint = BasicExtrinsic::new_unsigned(Call::Mint([user_number; 32]));
 
-    let mint_res = client.post("http:/localhost:9933/")
+    client.post("http:/localhost:9933/")
         .json(&serde_json::json!({
             "jsonrpc": "2.0",
             "id": 1,
             "method": "author_submitExtrinsic",
             "params": [HexDisplay::from(&mint.encode()).to_string()]
         }))
+        .send()
+        .expect("Failed to mint");
+    
+    thread::sleep(Duration::from_millis(900));
+    term.write_line("Welcome new friend! By joining, you've minted 10 ✨LOLO✨ LOOT")?;
+    thread::sleep(Duration::from_millis(900));
+    Ok(())
+}
+
+fn check_balance(client: &reqwest::blocking::Client, term: &Term, user_number: u8) -> io::Result<()> {
+    // CLI magic ✨
+    let mut sp = Spinner::new(Spinners::Dots9, "Checking your balance...".to_string());
+    thread::sleep(Duration::from_millis(3000));
+    sp.stop();
+    term.clear_line()?;
+
+    let balance_res = client.post("http:/localhost:9933/")
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "state_getStorage",
+            "params": [HexDisplay::from(&[user_number; 32].encode()).to_string()]
+        }))
         .send();
-    let mint_response_body: RPCResponses = mint_res.unwrap().json().unwrap();
-
-    println!("mint response {:?}", mint_response_body.result);
-    println!("Welcome new friend! By joining, you've minted 10 LOLO LOOT");
-
+    let balance_response_body: RPCResponses = balance_res.unwrap().json().unwrap();
+    let hex_rep = balance_response_body.result.split("0x").collect::<Vec<&str>>()[1];
+    let converted_hex = hex::decode(hex_rep);
+    match converted_hex {
+        Ok(v) => {
+            let balance = u32::decode(&mut &v[..]).unwrap();
+            println!("Your current balance is: {:?}", style(balance).green());
+        },
+        Err(e) => println!("Error: {:?}", e)
+    }
     Ok(())
 }
 
@@ -106,32 +130,29 @@ fn transfer_loot(client: &reqwest::blocking::Client, term: &Term, user_number: u
 
             let transfer_extrinsic = BasicExtrinsic::new_unsigned(Call::Transfer([user_number; 32], [recipient_id; 32], amount, fee));
 
-            let transfer_res = client.post("http:/localhost:9933/")
+            client.post("http:/localhost:9933/")
                 .json(&serde_json::json!({
                     "jsonrpc": "2.0",
                     "id": 1,
                     "method": "author_submitExtrinsic",
                     "params": [HexDisplay::from(&transfer_extrinsic.encode()).to_string()]
                 }))
-                .send();
-            let transfer_response_body: RPCResponses = transfer_res.unwrap().json().unwrap();
+                .send()
+                .expect("Transfer failed");
+            
+            // CLI magic ✨
+            let mut sp = Spinner::new(Spinners::Dots9, "Initiating your transfer...".to_string());
+            thread::sleep(Duration::from_millis(3000));
+            sp.stop();
+            term.clear_line()?;
+            thread::sleep(Duration::from_millis(3000));
+            term.write_line("Extrinsic submitted to the chain!")?;
 
-            println!("transfer response {:?}", transfer_response_body.result);
-
+            check_balance(client, term, user_number)?;
             Ok(())
         },
         "C" | "c" => {
-            let balance_res = client.post("http:/localhost:9933/")
-            .json(&serde_json::json!({
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "state_getStorage",
-                "params": [HexDisplay::from(&[user_number; 32].encode()).to_string()]
-            }))
-            .send();
-            let balance_response_body: RPCResponses = balance_res.unwrap().json().unwrap();
-
-            println!("balance response {:?}", balance_response_body.result);
+            check_balance(client, term, user_number)?;
             Ok(())
         },
         _ => {
@@ -146,12 +167,12 @@ pub fn run(term: &Term) -> io::Result<()> {
 
     let cyan = Style::new().cyan();
     let ferris = Style::new().color256(214).bold();
-
+    
     term.write_line(&ferris.apply_to("--- Welcome! Let's send some LOLO loot ---").to_string())?;
     thread::sleep(Duration::from_millis(900));
     term.write_line(&cyan.apply_to("Let's create an account for you!").to_string())?;
     thread::sleep(Duration::from_millis(900));
-
+    
     let user_number = get_u32_input("Give me a number and I'll create an account for you:", &term) as u8;
 
     create_account(&client, &term, user_number)?;
