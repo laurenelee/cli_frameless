@@ -16,6 +16,10 @@ pub fn run(term: &Term) -> io::Result<()> {
 
     if account_response == String::from("n") {
         // create an account for them
+        // call new account extrinsic and give [u8; 32]
+        // 
+        // call mint extrinsic 
+        // welcome! by joining, you've minted 10 lolo tokens 
         // rpc call out & create a new account 
         // but for now we'll set it manually 
         let id: u32 = 4;
