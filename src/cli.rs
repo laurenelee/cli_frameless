@@ -120,7 +120,7 @@ fn check_balance(client: &reqwest::blocking::Client, term: &Term, user_number: u
 }
 
 fn transfer_loot(client: &reqwest::blocking::Client, term: &Term, user_number: u8) -> io::Result<()> {
-    let action_response: String = get_string("Do you want to send LOOT or check your balance? (S) to send (C) to check ", &term);
+    let action_response: String = get_string("Do you want to send LOOT or check your balance? ( Enter (S) to send (C) to check ) ", &term);
 
     match action_response.as_str() {
         "S" | "s" => {
@@ -145,8 +145,7 @@ fn transfer_loot(client: &reqwest::blocking::Client, term: &Term, user_number: u
             thread::sleep(Duration::from_millis(3000));
             sp.stop();
             term.clear_line()?;
-            thread::sleep(Duration::from_millis(3000));
-            term.write_line("Extrinsic submitted to the chain!")?;
+            term.write_line("Your transfer has been submitted to the chain!")?;
 
             check_balance(client, term, user_number)?;
             Ok(())
@@ -178,5 +177,9 @@ pub fn run(term: &Term) -> io::Result<()> {
     create_account(&client, &term, user_number)?;
     mint_loot(&client, &term, user_number)?;
     transfer_loot(&client, &term, user_number)?;
+
+    thread::sleep(Duration::from_millis(900));
+    term.write_line(&ferris.apply_to("That's all folks, thanks for playing!").to_string())?;
+
     Ok(())
 }
